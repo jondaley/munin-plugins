@@ -76,6 +76,7 @@ if ARGV.any? && ARGV[0] == 'config'
 
   puts "exceptions.label Exceptions"
   puts "exceptions.type DERIVE"
+  puts "exceptions.draw LINE1"
   puts "exceptions.min 0"
 
   counts.keys.each do |key|
