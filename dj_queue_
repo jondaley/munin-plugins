@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+#
+# ======================================================================
+# Delayed Job Queue Plugin
+# ======================================================================
+#
+# Graphs the queue depth and failed jobs for the given queue.
+#
+# ----------------------------------------------------------------------
+# Usage and Info
+# ----------------------------------------------------------------------
+#
+# In order to make this work, you'll need to add a queue column to
+# your DJ table and populate it with a string that represents the
+# queue. Then, symlink this plugin to:
+#
+#   /etc/munin/plugins/dj_queue_YourQueueName
+#
+# You'll also need to set the `db_yml` environment variable to point to
+# your `database.yml` file.
+#
+# ----------------------------------------------------------------------
+# License
+# ----------------------------------------------------------------------
+#
+# Copyright (c) 2010-2011, Estately, Inc.
+# Released under the terms of the MIT License; see LICENSE for details.
+#
+
+require 'rubygems'
+require 'sequel'
+require 'yaml'
+
+########################################################################
+### Plugin Configuration
+########################################################################
+
+queue = __FILE__.split('_').last
+
+########################################################################
+### Connection
+########################################################################
+
+CREDENTIALS = YAML.load_file( ENV['db_yml'] )[ 'production' ]
+
+connect_string = "postgres://%s:%s@%s/%s" % [
+  CREDENTIALS[ 'username' ],
+  CREDENTIALS[ 'password' ],
+  CREDENTIALS[ 'host'     ],
+  CREDENTIALS[ 'database' ]
+]
+
+DB = Sequel.connect( connect_string )
+
+########################################################################
+### Fetch Data
+########################################################################
+
+select_sql = <<END
+  SELECT failed_at
+  FROM delayed_jobs
+  WHERE queue = '#{queue}'
+END
+
+pending, failed = DB[ select_sql ].
+  map       {|job   | job[:failed_at] }.
+  partition {|status| status.nil?     }
+
+########################################################################
+### Configuration Output
+########################################################################
+
+if ARGV.any? && ARGV[0] == 'config'
+  puts "graph_title #{queue} Jobs"
+  puts "graph_vlabel Jobs"
+  puts "graph_category Workers"
+
+  puts "pending.label Pending Jobs"
+  puts "failed.label Failed Jobs"
+
+  exit 0
+end
+
+########################################################################
+### Regular Output
+########################################################################
+
+puts "pending.value #{pending.size}"
+puts "failed.value #{failed.size}"
