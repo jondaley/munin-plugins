@@ -1,0 +1,108 @@
+#!/usr/bin/env ruby
+#
+# ======================================================================
+# Exceptions Multigraph Plugin
+# ======================================================================
+#
+# Graphs the exception rate using DERIVE at the top level, multigraphs
+# each individual exception rate.
+#
+# ----------------------------------------------------------------------
+# Usage and Info
+# ----------------------------------------------------------------------
+#
+# This plugin expects you to be running Redis on the local machine,
+# using db 1, and to store exception counts like so:
+#
+#   metrics:exceptions:YYYYMMDD:Exception::Class
+#
+# So, if you got an ActiveRecord::RecordNotFound on January 2, 2011,
+# you'd increment:
+#
+#   metrics:exceptions:20110102:ActiveRecord::RecordNotFound
+#
+# ----------------------------------------------------------------------
+# License
+# ----------------------------------------------------------------------
+#
+# Copyright (c) 2010-2011, Estately, Inc.
+# Released under the terms of the MIT License; see LICENSE for details.
+#
+
+require 'rubygems'
+require 'redis'
+
+########################################################################
+### Connection
+########################################################################
+
+REDIS = Redis.new( :db => 1 )
+
+########################################################################
+### Helper Methods
+########################################################################
+
+# from http://munin-monitoring.org/wiki/notes_on_datasource_names
+def sanitize( name )
+  return name.
+    sub(  /^[^A-Za-z_]/, '_'   ).
+    gsub( /[^A-Za-z0-9_]+/, '-' )
+end
+
+########################################################################
+### Fetch Data
+########################################################################
+
+keys = REDIS.keys('metrics:exceptions:*')
+
+counts = {}
+keys.each do |key|
+  exception_class = key.split(/:/, 4).last
+  name = sanitize( exception_class )
+
+  counts[ name ] ||= 0
+  counts[ name ] +=  REDIS.get( key ).to_i
+end
+
+########################################################################
+### Configuration Output
+########################################################################
+
+if ARGV.any? && ARGV[0] == 'config'
+  puts "multigraph exceptions"
+  puts "graph_title Application Exceptions"
+  puts "graph_vlabel Exceptions"
+  puts "graph_category Application"
+
+  puts "exceptions.label Exceptions"
+  puts "exceptions.type DERIVE"
+  puts "exceptions.min 0"
+
+  counts.keys.each do |key|
+    puts "multigraph exceptions.#{key}"
+    puts "graph_title #{key} Exceptions"
+    puts "graph_vlabel Exceptions"
+    puts "graph_category Application"
+
+    puts "exceptions.label Exceptions"
+    puts "exceptions.type DERIVE"
+    puts "exceptions.draw LINE1"
+    puts "exceptions.min 0"
+  end
+
+  exit 0
+end
+
+########################################################################
+### Regular Output
+########################################################################
+
+puts "multigraph exceptions"
+puts "exceptions.value %d" % [
+  counts.values.inject(0) {|sum,c| sum + c }
+]
+
+counts.each do |key, count|
+  puts "multigraph exceptions.#{key}"
+  puts "exceptions.value #{count}"
+end
