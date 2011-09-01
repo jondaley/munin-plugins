@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'sequel'
+require 'yaml'
+
+########################################################################
+### Plugin Configuration
+########################################################################
+
+queue = __FILE__.split('_').last
+
+########################################################################
+### Connection
+########################################################################
+
+db_credentials_path = "/var/www/estately/shared/config/database.yml"
+CREDENTIALS = YAML.load_file( db_credentials_path )[ 'production' ]
+
+connect_string = "postgres://%s:%s@%s/%s" % [
+  CREDENTIALS[ 'username' ],
+  CREDENTIALS[ 'password' ],
+  CREDENTIALS[ 'host'     ],
+  CREDENTIALS[ 'database' ]
+]
+
+DB = Sequel.connect( connect_string )
+
+########################################################################
+### Fetch Data
+########################################################################
+
+select_sql = "SELECT nextval('delayed_jobs_id_seq');"
+counter    = DB[ select_sql ][ :nextval ]
+
+########################################################################
+### Configuration Output
+########################################################################
+
+if ARGV.any? && ARGV[0] == 'config'
+  puts "graph_title Job Volume"
+  puts "graph_vlabel Jobs"
+  puts "graph_category Workers"
+
+  puts "counter.label Jobs"
+  puts "counter.type DERIVE"
+
+  exit 0
+end
+
+########################################################################
+### Regular Output
+########################################################################
+
+puts "pending.value #{pending.size}"
+puts "failed.value #{failed.size}"
