@@ -1,0 +1,150 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'sequel'
+require 'yaml'
+
+########################################################################
+### Plugin Configuration
+########################################################################
+
+database = __FILE__.split('_').last
+
+########################################################################
+### Connection
+########################################################################
+
+db_credentials_path = "/var/www/estately/shared/config/database.yml"
+CREDENTIALS = YAML.load_file( db_credentials_path )[ 'production' ]
+
+connect_string = "postgres://%s:%s@%s/%s" % [
+  CREDENTIALS[ 'username' ],
+  CREDENTIALS[ 'password' ],
+  CREDENTIALS[ 'host'     ],
+  database
+]
+
+DB = Sequel.connect( connect_string )
+
+########################################################################
+### Fetch Data
+########################################################################
+#
+# queries below modified from the ones given on the postgres wiki:
+#
+#   http://wiki.postgresql.org/wiki/Index_Maintenance
+#
+
+sql = <<ENDSQL
+  SELECT
+      t.tablename,
+      indexname,
+      pg_relation_size(t.tablename::text) AS table_size,
+      pg_relation_size(indexrelname::text) AS index_size
+  FROM pg_tables t
+  LEFT OUTER JOIN pg_class c ON t.tablename=c.relname
+  LEFT OUTER JOIN
+      ( SELECT c.relname AS ctablename, ipg.relname AS indexname, x.indnatts AS number_of_columns, idx_scan, idx_tup_read, idx_tup_fetch,indexrelname FROM pg_index x
+             JOIN pg_class c ON c.oid = x.indrelid
+             JOIN pg_class ipg ON ipg.oid = x.indexrelid
+             JOIN pg_stat_all_indexes psai ON x.indexrelid = psai.indexrelid )
+      AS foo
+      ON t.tablename = foo.ctablename
+  WHERE t.schemaname='public'
+  ORDER BY 1,2;
+ENDSQL
+
+
+# iterate over the results of the above query and build up a hash of the
+# results that looks thusly:
+#
+# hsh = {
+#   :table_name => {
+#     :size => 123_456,
+#     :indexes => {
+#       :idx_1 => 123_456,
+#       :idx_2 => 123_456
+#     }
+#   }
+# }
+#
+
+sizes = {}
+total_index_size = 0
+
+DB[ sql ].each do |row|
+  tbl = row[:tablename]
+  idx = row[:indexname]
+  tbl_size = row[:table_size]
+  idx_size = row[:index_size]
+
+  sizes[ tbl ] ||= {}
+  sizes[ tbl ][ :size ] = tbl_size
+
+  sizes[ tbl ][ :indexes ] ||= {}
+  sizes[ tbl ][ :indexes ][ idx ] = idx_size
+
+  total_index_size += idx_size || 0
+end
+
+total_table_size = sizes.values.inject(0) {|sum, tbl| sum + tbl[:size] }
+
+########################################################################
+### Configuration Output
+########################################################################
+
+if ARGV.any? && ARGV[0] == 'config'
+  puts "multigraph pg_size_#{database}"
+  puts "graph_title PostgreSQL database size"
+  puts "graph_vlabel Size"
+  puts "graph_category PostgreSQL"
+  puts "graph_info Size of database"
+  puts "graph_args --base 1024"
+  puts "graph_order tables indexes"
+
+  puts "tables.label tables"
+  puts "tables.draw AREA"
+
+  puts "indexes.label indexes"
+  puts "indexes.draw STACK"
+
+  sizes.keys.each do |table|
+    puts "multigraph pg_size_#{database}.#{table}"
+    puts "graph_title #{table} size"
+    puts "graph_vlabel Size"
+    puts "graph_category PostgreSQL"
+    puts "graph_info Size of table"
+
+    indexes = sizes[table][:indexes].keys.sort
+    puts "graph_order %s" % [
+      ["data", indexes].flatten.compact.join(' ')
+    ]
+
+    puts "data.label data"
+    puts "data.draw AREA"
+
+    indexes.each do |idx|
+      puts "#{idx}.label #{idx}"
+      puts "#{idx}.draw STACK"
+    end
+  end
+
+  exit 0
+end
+
+########################################################################
+### Regular Output
+########################################################################
+
+puts "multigraph pg_size_#{database}"
+puts "tables.value #{total_table_size}"
+puts "indexes.value #{total_index_size}"
+
+sizes.keys.each do |table|
+  puts "multigraph pg_size_#{database}.#{table}"
+  puts "data.value #{sizes[table][:size]}"
+
+  sizes[table][:indexes].each do |name, size|
+    puts "#{name}.value #{size}"
+  end
+end
