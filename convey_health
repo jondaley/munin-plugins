@@ -1,0 +1,161 @@
+#!/bin/sh
+# -*- sh -*-
+
+: << =cut
+
+=head1 NAME
+
+uptime - Plugin to monitor the convey's health
+
+=head1 NOTES
+
+Checks for the four convey outputs (anything else is treated as bad output)
+  System OK (Green LED is on)
+  Coprocessor Status : Successfully initialized coprocessor
+  Host Sensors: OK
+  CoProcessor Sensors: OK
+
+=head1 AUTHOR
+
+Written by Jon Daley, based on the uptime plugin
+
+=head1 LICENSE
+
+Public domain
+
+=head1 MAGIC MARKERS
+
+ #%# family=auto
+ #%# capabilities=autoconf
+
+=cut
+
+. $MUNIN_LIBDIR/plugins/plugin.sh
+
+CACHE_FILE=/var/run/munin/convey_health_cached
+
+if [ "$1" = "autoconf" ]; then
+	echo yes 
+	exit 0
+fi
+
+if [ "$1" = "config" ]; then
+
+	echo 'graph_title Convey Health'
+	echo 'graph_args --base 1000 -l 0 '
+	echo 'graph_vlabel health'
+	echo 'graph_category conveyhost'
+	echo 'graph_order green_led host_sensors coprocessor coprocessor_sensors coprocessor_command'
+
+	echo 'green_led.label Green LED'
+	echo 'green_led.critical 0:0'
+	echo 'green_led.draw AREA'
+	echo 'green_led.info 0 means OK'
+	print_critical green_led
+	print_warning green_led
+
+	echo 'coprocessor.label Coprocessor Status'
+	echo 'coprocessor.critical 0:0'
+	echo 'coprocessor.draw STACK'
+	echo 'coprocessor.info 0 means OK'
+	print_critical coprocessor
+	print_warning coprocessor
+
+	echo 'host_sensors.label Host Sensors'
+	echo 'host_sensors.critical 0:0'
+	echo 'host_sensors.draw STACK'
+	echo 'host_sensors.info 0 means OK'
+	print_critical host_sensors
+	print_warning host_sensors
+
+	echo 'coprocessor_sensors.label Coprocessor Sensors'
+	echo 'coprocessor_sensors.critical 0:0'
+	echo 'coprocessor_sensors.draw STACK'
+	echo 'coprocessor_sensors.info 0 means OK'
+	print_critical coprocessor_sensors
+	print_warning coprocessor_sensors
+
+	echo 'coprocessor_command.label Coprocessor Command'
+	echo 'coprocessor_command.critical 0:0'
+	echo 'coprocessor_command.draw STACK'
+	echo 'coprocessor_command.info 0 means OK'
+	print_critical coprocessor_command
+	print_warning coprocessor_command
+
+	echo 'installed_component.label Installed Component Check'
+	echo 'installed_component.critical 0:0'
+	echo 'installed_component.draw STACK'
+	echo 'installed_component.info 0 means OK'
+	print_critical installed_component
+	print_warning installed_component
+
+	exit 0
+fi
+ 
+# the health_check script takes too long for munin, so we
+# need to cache the data in a cronjob, and retrieve the data
+# later
+if [ "$1" = "cronjob" ]; then
+  /opt/convey/support/health_check > $CACHE_FILE
+  exit 0
+else
+  OUT=`cat $CACHE_FILE`
+fi
+
+# analyze output
+echo $OUT | grep -q 'System OK (Green LED is on)'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  GREEN_LED=0
+else
+  GREEN_LED=1
+fi
+
+echo $OUT | grep -q 'Coprocessor Status : OK'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  COPROCESSOR=0
+else
+  COPROCESSOR=1
+fi
+
+echo $OUT | grep -q 'Host Sensors : OK'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  HOST_SENSORS=0
+else
+  HOST_SENSORS=1
+fi
+
+echo $OUT | grep -q 'Coprocessor Sensors : OK'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  COPROCESSOR_SENSORS=0
+else
+  COPROCESSOR_SENSORS=1
+fi
+
+echo $OUT | grep -q 'Coprocessor Command Response : OK'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  COPROCESSOR_COMMAND=0
+else
+  COPROCESSOR_COMMAND=1
+fi
+
+echo $OUT | grep -q 'Installed component check : OK'
+FOUND=$?
+if [ ${FOUND:-} == 0 ] ; then
+  INSTALLED_COMPONENT=0
+else
+  INSTALLED_COMPONENT=1
+fi
+
+# print final output
+echo "green_led.value $GREEN_LED"
+echo "coprocessor.value $COPROCESSOR"
+echo "host_sensors.value $HOST_SENSORS"
+echo "coprocessor_sensors.value $COPROCESSOR_SENSORS"
+echo "coprocessor_command.value $COPROCESSOR_COMMAND"
+echo "installed_component.value $INSTALLED_COMPONENT"
+
