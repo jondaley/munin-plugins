@@ -18,8 +18,31 @@ use warnings;
 use vars qw(%attrs %data %num);
 
 my $apcaccess='/sbin/apcaccess';
-#$apcaccess='/home/behanw/bin/apcaccess';
-my $config='/etc/munin/plugin-conf.d/apcupsd_ww';
+
+my $host = "localhost";
+$host = $ENV{"host"} if $ENV{"host"};
+my $port = "3551";
+$port = $ENV{"port"} if $ENV{"port"};
+
+# You can monitor multiple UPSes by adding configuration variables to
+# /etc/munin/plugin-conf.d/apcupsd like this:
+#
+# [apcupsd_*]
+# env.host localhost
+#
+# [apcupsd_1]
+# env.port 3551
+#
+# [apcupsd_2]
+# env.port 3552
+#
+# [apcupsd_3]
+# env.port 3553
+#
+# [apcupsd_4]
+# env.port 3554
+
+
 
 my $language = $ENV{LANG} || 'en';
 
@@ -158,21 +181,23 @@ my $language = $ENV{LANG} || 'en';
 		type => 'bool',
 		critical => '0:',	# Failed
 	},
-	#STATUS => {	# STATUS   : ONLINE
-	#	name => 'status',
-	#	label => {
-	#		en => 'Status',
-	#	},
-	#	type => 'status',
-	#	critical => 0,
-	#},
+        STATUS => {	# STATUS   : ONLINE
+	    name => 'status',
+	    label => {
+		en => 'Status',
+	    },
+	    type => 'status',
+	    critical => '0:0',
+        },
+        BADBATTS => {
+	    name => 'badbatts',
+	    label => {
+		en => 'Bad Battery',
+	    },
+	    type => 'badbatts',
+	    critical => '0:0',  # anything but zero is a failure
+        },
 );
-
-# Read config file
-# Can be used to override settings in %attrs
-if (-f $config) {
-	require $config;
-}
 
 # Determine plugin capabilities
 if (defined $ARGV[0] && $ARGV[0] =~ /autoconf|detect/) {
@@ -187,19 +212,24 @@ if (defined $ARGV[0] && $ARGV[0] =~ /autoconf|detect/) {
 
 # Read info from apcupsd using apcaccess
 die "$apcaccess: not found\n" unless -x $apcaccess;
-open (APCACCESS, "$apcaccess 2>&1 |") || die "$apcaccess: $!\n";
+open (APCACCESS, "$apcaccess status $host:$port 2>&1 |") || die "$apcaccess: $!\n";
 while (<APCACCESS>) {
 	chomp;
 	die "$apcaccess: $_\n" if /Error contacting apcupsd/;
-	$data{$1} = $2 if /^(\S+?)\s*:\s+(.+?)$/;
-	$num{$1} = $2 if /^(\S+?)\s*:\s+([\d.x]+)/;
+	$data{$1} = $2 if /^(\S+?)\s*:\s+(.+?)[ ]*$/;
+	$num{$1} = $2 if /^(\S+?)\s*:\s+([\d.x]+)[ ]*/;
 }
 close APCACCESS;
 
 # Auto-configure plugin
 if (defined $ARGV[0] && $ARGV[0] eq 'config') {
 	if (defined $data{UPSNAME}) {
+	    if (defined $data{MODEL}) {
 		print "graph_title $data{UPSNAME} ($data{MODEL})\n";
+	    }
+	    else{
+		print "graph_title $data{UPSNAME}\n";
+	    }
 	} else {
 		print "graph_title $data{MODEL}\n";
 	}
@@ -332,12 +362,16 @@ sub bool {
 	return $num{$what} eq "OK" ? "1" : "0";
 }
 
-#sub status {
-#	my $what = shift;
-#	return unless defined $data{$what};
-#	print "$attrs{$what}{name}.value ";
-#	print $num{$what} eq "ONLINE" ? "1" : "0";
-#	print "\n";
-#}
+sub status {
+	my $what = shift;
+	return $data{$what} eq "ONLINE" ? "0" : "1";
+}
 
-# vim: sw=4 ts=4
+sub badbatts {
+	my $what = shift;
+	
+	# return blanks if not defined?
+	return unless defined $data{$what};
+
+	return $data{$what} eq "0" ? "0" : "1";
+}
