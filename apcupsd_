@@ -364,7 +364,9 @@ sub bool {
 
 sub status {
 	my $what = shift;
-	return $data{$what} eq "ONLINE" ? "0" : "1";
+	# We'll return "true" (0) even when reporting a LOWBATT condition
+	# because we can catch that error when checking the TIMELEFT field
+	return $data{$what} eq "ONLINE" ? "0" : $data{$what} eq "ONLINE LOWBATT" ? "0" : "1";
 }
 
 sub badbatts {
