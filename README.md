@@ -24,6 +24,7 @@ License -- The MIT License
 ------------------------------------------------------------------------
 
 Original Copyright (c) 2010-2011, Estately, Inc.
+
 Updated Copyright (c)2012-2026, Lime Daley
 
 Permission is hereby granted, free of charge, to any person obtaining
