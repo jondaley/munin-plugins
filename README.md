@@ -1,5 +1,7 @@
-Estately Munin Plugins
+Custom Munin Plugins
 ========================================================================
+This repo was originally forked(?)/copied from Estately, Inc,
+but that repo appears to no longer be published.
 
 Contained within are a number of plugins for [munin][0] that we
 find useful to keep track of our systems and applications. They are
@@ -11,6 +13,8 @@ instructions on how to make it work for you.
 Plugins
 ------------------------------------------------------------------------
 
+* `apcupsd_` -- Plugin to monitor apcupsd via apcaccess
+* `convey_health` -- I used to manage a cluster of Convey machines
 * `dj_queue_` -- a plugin that lets you monitor [DelayedJob][1] queues
 * `exceptions` -- graph application exception rates
 
@@ -19,7 +23,8 @@ Plugins
 License -- The MIT License
 ------------------------------------------------------------------------
 
-Copyright (c) 2010-2011, Estately, Inc.
+Original Copyright (c) 2010-2011, Estately, Inc.
+Updated Copyright (c)2012-2026, Lime Daley
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
